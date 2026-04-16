@@ -1,0 +1,6 @@
+{
+  "appId": "com.milove.app",
+  "appName": "MiLove",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}

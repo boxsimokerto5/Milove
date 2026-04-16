@@ -1,0 +1,18 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  
+  --color-mc-green: #00C853;
+  --color-mc-light-green: #E8F5E9;
+  --color-mc-bg: #F0F2F5;
+  --color-mc-white: #FFFFFF;
+  --color-mc-text: #1C1E21;
+  --color-mc-text-secondary: #65676B;
+  --color-mc-border: #E4E6EB;
+}
+
+body {
+  background-color: var(--color-mc-bg);
+  color: var(--color-mc-text);
+}

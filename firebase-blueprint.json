@@ -1,0 +1,101 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile with location and status.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique identifier for the user." },
+        "accountId": { "type": "string", "description": "Unique searchable ID for the user." },
+        "displayName": { "type": "string", "description": "User's public name." },
+        "photoURL": { "type": "string", "description": "URL to the user's profile picture." },
+        "bio": { "type": "string", "description": "Short user biography." },
+        "gender": { "type": "string", "enum": ["male", "female", "other"], "description": "User's gender." },
+        "geohash": { "type": "string", "description": "Geohash for location searching." },
+        "lat": { "type": "number", "description": "Latitude coordinate." },
+        "lng": { "type": "number", "description": "Longitude coordinate." },
+        "lastSeen": { "type": "string", "format": "date-time", "description": "Last time the user was active." },
+        "isActive": { "type": "boolean", "description": "Online status." }
+      },
+      "required": ["uid", "accountId", "displayName"]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "Global banner message for all users.",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" },
+        "active": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["text", "active"]
+    },
+    "Conversation": {
+      "title": "Conversation",
+      "description": "A chat room between two users.",
+      "type": "object",
+      "properties": {
+        "participants": { "type": "array", "items": { "type": "string" }, "description": "Array of user UIDs." },
+        "lastMessage": {
+          "type": "object",
+          "properties": {
+            "text": { "type": "string" },
+            "senderId": { "type": "string" },
+            "createdAt": { "type": "string", "format": "date-time" }
+          }
+        },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["participants", "updatedAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A single chat message.",
+      "type": "object",
+      "properties": {
+        "conversationId": { "type": "string", "description": "ID of the parent conversation." },
+        "senderId": { "type": "string", "description": "UID of the sender." },
+        "text": { "type": "string", "description": "Message content." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the message was sent." }
+      },
+      "required": ["conversationId", "senderId", "text", "createdAt"]
+    },
+    "Moment": {
+      "title": "Moment",
+      "description": "Social wall post.",
+      "type": "object",
+      "properties": {
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorPhoto": { "type": "string" },
+        "text": { "type": "string" },
+        "imageUrls": { "type": "array", "items": { "type": "string" } },
+        "likes": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["authorId", "text", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "Public user profiles."
+    },
+    "/conversations/{convId}": {
+      "schema": "Conversation",
+      "description": "Chat discovery metadata."
+    },
+    "/conversations/{convId}/messages/{msgId}": {
+      "schema": "Message",
+      "description": "List of messages in a conversation."
+    },
+    "/moments/{momentId}": {
+      "schema": "Moment",
+      "description": "Social wall posts."
+    },
+    "/announcements/{id}": {
+      "schema": "Announcement",
+      "description": "Global site banners."
+    }
+  }
+}

@@ -1,0 +1,52 @@
+name: Build MiLove APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Web app
+        run: npm run build
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Capacitor
+        run: |
+          npx cap add android || true
+          npm run cap:sync
+
+      - name: Generate Assets
+        run: npm run cap:assets
+
+      - name: Generate Keystore
+        run: npm run cap:keystore
+
+      - name: Build Android APK
+        run: |
+          cd android
+          ./gradlew assembleRelease
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: milove-release-apk
+          path: android/app/build/outputs/apk/release/app-release-unsigned.apk

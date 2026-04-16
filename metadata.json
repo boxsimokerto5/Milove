@@ -1,0 +1,11 @@
+{
+  "name": "MiLove",
+  "description": "A real-time messaging app with Nearby People discovery and social features, focused on connecting people with love and kindness.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "real-time-chat",
+    "location-based-discovery"
+  ]
+}
