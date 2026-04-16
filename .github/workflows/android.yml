@@ -29,13 +29,11 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Capacitor
+      - name: Setup Capacitor and Generate Assets
         run: |
           npx cap add android || true
           npm run cap:sync
-
-      - name: Generate Assets
-        run: npm run cap:assets
+          npm run cap:assets
 
       - name: Generate Keystore
         run: npm run cap:keystore
