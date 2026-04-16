@@ -10,7 +10,7 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "cap:sync": "npm run build && npx cap sync",
-    "cap:assets": "npx @capacitor/assets generate --android --logoPath ./assets/logo.svg",
+    "cap:assets": "npx @capacitor/assets generate --android",
     "cap:keystore": "keytool -genkey -v -keystore my-release-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias my-key-alias -storepass milove123 -keypass milove123 -dname \"CN=milove, OU=milove, O=milove, L=milove, S=milove, C=ID\""
   },
   "dependencies": {

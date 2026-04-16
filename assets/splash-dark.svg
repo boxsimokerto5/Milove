@@ -1,0 +1,17 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background with MiChat Green -->
+  <rect width="1024" height="1024" rx="220" fill="#00C853"/>
+  
+  <!-- Stylized White Rabbit Ears (MiChat Style) -->
+  <path d="M420 380 C420 280 340 220 380 180 C420 140 480 200 480 300" fill="none" stroke="white" stroke-width="45" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M604 380 C604 280 684 220 644 180 C604 140 544 200 544 300" fill="none" stroke="white" stroke-width="45" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Rabbit Face Silhouette -->
+  <path d="M380 400 C380 300 644 300 644 400 C644 550 512 650 512 650 C512 650 380 550 380 400Z" fill="white" fill-opacity="0.15" stroke="white" stroke-width="35" stroke-linecap="round"/>
+  
+  <!-- "MiLove" Text -->
+  <text x="512" y="880" font-family="Arial, sans-serif" font-size="160" font-weight="900" fill="white" text-anchor="middle" style="letter-spacing: -10px; font-style: italic;">MILOVE</text>
+  
+  <!-- Small Heart Accent -->
+  <path d="M512 600 C512 580 540 560 560 580 C580 600 512 650 512 650 C512 650 444 600 464 580 C484 560 512 580 512 600Z" fill="white" />
+</svg>
