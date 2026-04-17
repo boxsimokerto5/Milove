@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { db, auth } from '../firebase';
-import { collection, query, limit, getDocs, updateDoc, doc, where } from 'firebase/firestore';
+import { collection, query, limit, getDocs, updateDoc, doc, where, arrayUnion, getDoc } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
 import { getCurrentLocation, getGeohash, calculateDistance } from '../lib/location';
 import { UserProfile } from '../types';
-import { MapPin, Search, MessageSquare, UserPlus, X, Maximize2, Filter, Check } from 'lucide-react';
+import { MapPin, Search, MessageSquare, UserPlus, X, Maximize2, Filter, Check, Heart, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface NearbyProps {
   onStartChat: (uid: string) => void;
+  profile: UserProfile | null;
+  onViewProfile: (uid: string) => void;
 }
 
-export default function Nearby({ onStartChat }: NearbyProps) {
+export default function Nearby({ onStartChat, profile, onViewProfile }: NearbyProps) {
   const [people, setPeople] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -22,6 +24,62 @@ export default function Nearby({ onStartChat }: NearbyProps) {
   const [genderFilter, setGenderFilter] = useState<'all' | 'male' | 'female'>('all');
   const [fullscreenImage, setFullscreenImage] = useState<string|null>(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [matchData, setMatchData] = useState<UserProfile | null>(null);
+
+  const calculateAge = (bday?: string) => {
+    if (!bday) return null;
+    const today = new Date();
+    const birth = new Date(bday);
+    let age = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+      age--;
+    }
+    return age;
+  };
+
+  const formatDistance = (dist: number) => {
+    if (dist < 1) {
+      return Math.round(dist * 1000) + 'm';
+    }
+    return dist.toFixed(1) + 'km';
+  };
+
+  const handleLike = async (person: UserProfile) => {
+    if (!auth.currentUser) return;
+    const myUid = auth.currentUser.uid;
+    const userRef = doc(db, 'users', myUid);
+    const personRef = doc(db, 'users', person.uid);
+
+    try {
+      // 1. Update my likes
+      await updateDoc(userRef, {
+        likes: arrayUnion(person.uid)
+      });
+
+      // 2. Update their likedBy
+      await updateDoc(personRef, {
+        likedBy: arrayUnion(myUid)
+      });
+
+      // 2. Check if the other person likes me
+      const personSnap = await getDoc(personRef);
+      if (personSnap.exists()) {
+        const pData = personSnap.data() as UserProfile;
+        if (pData.likes?.includes(myUid)) {
+          // IT'S A MATCH!
+          await updateDoc(userRef, { matches: arrayUnion(person.uid) });
+          await updateDoc(personRef, { matches: arrayUnion(myUid) });
+          setMatchData(person);
+        }
+      }
+      
+      // Refresh list to update UI state if needed
+      fetchNearby();
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `users/${myUid}`);
+    }
+  };
 
   const fetchNearby = async () => {
     try {
@@ -48,22 +106,26 @@ export default function Nearby({ onStartChat }: NearbyProps) {
         q = query(collection(db, 'users'), where('gender', '==', genderFilter), limit(50));
       }
 
-      const snap = await getDocs(q);
-      const results: UserProfile[] = [];
-      snap.forEach(doc => {
-        const data = doc.data() as UserProfile;
-        if (data.uid !== auth.currentUser?.uid && data.lat && data.lng) {
-          results.push(data);
-        }
-      });
+      try {
+        const snap = await getDocs(q);
+        const results: UserProfile[] = [];
+        snap.forEach(doc => {
+          const data = doc.data() as UserProfile;
+          if (data.uid !== auth.currentUser?.uid && data.lat && data.lng) {
+            results.push(data);
+          }
+        });
 
-      const sorted = results.sort((a, b) => {
-        const distA = calculateDistance(loc.lat, loc.lng, a.lat!, a.lng!);
-        const distB = calculateDistance(loc.lat, loc.lng, b.lat!, b.lng!);
-        return distA - distB;
-      });
+        const sorted = results.sort((a, b) => {
+          const distA = calculateDistance(loc.lat, loc.lng, a.lat!, a.lng!);
+          const distB = calculateDistance(loc.lat, loc.lng, b.lat!, b.lng!);
+          return distA - distB;
+        });
 
-      setPeople(sorted);
+        setPeople(sorted);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.LIST, 'users');
+      }
     } catch (err) {
       console.error(err);
       setError("Please enable location to find people nearby.");
@@ -97,7 +159,13 @@ export default function Nearby({ onStartChat }: NearbyProps) {
     }
   };
 
-  const displayPeople = searchQuery.length >= 3 ? searchResults : people;
+  const displayPeople = (searchQuery.length >= 3 ? searchResults : people).filter(u => {
+    // Filter out users I blocked
+    if (profile?.blockedUsers?.includes(u.uid)) return false;
+    // Filter out users who blocked me
+    if (u.blockedUsers?.includes(auth.currentUser?.uid || '')) return false;
+    return true;
+  });
 
   if (loading) {
     return (
@@ -227,7 +295,8 @@ export default function Nearby({ onStartChat }: NearbyProps) {
           {displayPeople.map(person => (
             <div 
               key={person.uid}
-              className="bg-white p-4 flex items-center gap-4 border-b border-gray-50 transition-all hover:bg-mc-light-green cursor-pointer last:border-none"
+              onClick={() => onViewProfile(person.uid)}
+              className="bg-white p-4 flex items-center gap-4 border-b border-gray-50 transition-all hover:bg-mc-light-green cursor-pointer last:border-none group active:scale-[0.99]"
             >
               <div className="relative group cursor-pointer" onClick={(e) => { e.stopPropagation(); setFullscreenImage(person.photoURL || `https://ui-avatars.com/api/?name=${person.displayName}`); }}>
                 <img 
@@ -239,31 +308,125 @@ export default function Nearby({ onStartChat }: NearbyProps) {
                   <Maximize2 className="text-white w-4 h-4" />
                 </div>
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <h3 className="font-semibold text-mc-text truncate">{person.displayName}</h3>
-                  <span className="text-[10px] text-mc-green font-medium shrink-0">
-                    {person.accountId} • {myLocation && person.lat ? calculateDistance(myLocation.lat, myLocation.lng, person.lat, person.lng).toFixed(1) + 'km' : 'Unknown'}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-mc-text truncate">
+                      {person.displayName}
+                      {person.birthDate && <span className="ml-1 text-gray-400 font-normal">, {calculateAge(person.birthDate)}</span>}
+                    </h3>
+                    <span className="text-[10px] text-mc-green font-medium shrink-0">
+                    {person.accountId} • {myLocation && person.lat && person.lng 
+                      ? formatDistance(calculateDistance(myLocation.lat, myLocation.lng, person.lat, person.lng)) 
+                      : 'Unknown'}
                   </span>
                 </div>
                 <p className="text-mc-text-secondary text-xs truncate mt-0.5">
                   {person.bio || "Hi, I'm new here!"}
                 </p>
               </div>
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onStartChat(person.uid);
-                }}
-                className="p-2 text-mc-green hover:bg-white rounded-full transition-colors"
-                title="Message"
-              >
-                <MessageSquare className="w-4 h-4" />
-              </button>
+              <div className="flex flex-col items-center gap-2 px-2">
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleLike(person);
+                  }}
+                  disabled={person.likes?.includes(auth.currentUser?.uid || '')}
+                  className={`flex flex-col items-center group/btn transition-all ${
+                    person.likedBy?.includes(auth.currentUser?.uid || '') || person.matches?.includes(auth.currentUser?.uid || '')
+                      ? 'text-red-500' 
+                      : 'text-gray-300 hover:text-red-400'
+                  }`}
+                  title="Like"
+                >
+                  <div className={`p-2 rounded-full mb-1 transition-all ${person.matches?.includes(auth.currentUser?.uid || '') ? 'bg-red-50' : 'group-hover/btn:bg-red-50'}`}>
+                    <Heart className={`w-4 h-4 ${person.matches?.includes(auth.currentUser?.uid || '') ? 'fill-current' : ''}`} />
+                  </div>
+                  <span className="text-[8px] font-black uppercase tracking-widest hidden md:block">
+                    {person.matches?.includes(auth.currentUser?.uid || '') ? 'Matched' : 'Suka'}
+                  </span>
+                </button>
+
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onStartChat(person.uid);
+                  }}
+                  className="flex flex-col items-center group/chat text-mc-green transition-all"
+                  title="Kirim Pesan"
+                >
+                  <div className="p-2 rounded-full mb-1 group-hover/chat:bg-mc-light-green transition-all">
+                    <MessageSquare className="w-4 h-4" />
+                  </div>
+                  <span className="text-[8px] font-black uppercase tracking-widest hidden md:block">Sapa</span>
+                </button>
+              </div>
             </div>
           ))}
         </div>
       )}
+
+      {/* Match Modal */}
+      <AnimatePresence>
+        {matchData && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] bg-black/80 flex items-center justify-center p-6 backdrop-blur-sm"
+          >
+            <motion.div 
+              initial={{ scale: 0.5, rotate: -10 }}
+              animate={{ scale: 1, rotate: 0 }}
+              className="bg-white rounded-[2.5rem] p-8 max-w-sm w-full text-center relative overflow-hidden"
+            >
+              <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-red-400 via-pink-500 to-mc-green" />
+              <div className="flex justify-center mb-6">
+                <div className="relative">
+                  <motion.div 
+                    animate={{ scale: [1, 1.2, 1], rotate: [0, 10, -10, 0] }}
+                    transition={{ repeat: Infinity, duration: 2 }}
+                    className="bg-mc-green/10 p-4 rounded-full"
+                  >
+                    <Sparkles className="text-mc-green w-10 h-10" />
+                  </motion.div>
+                </div>
+              </div>
+              
+              <h2 className="text-3xl font-black text-mc-text mb-2 italic tracking-tighter uppercase">IT'S A MATCH!</h2>
+              <p className="text-gray-500 text-sm mb-8 font-medium">You and <span className="text-mc-green font-bold">{matchData.displayName}</span> liked each other!</p>
+              
+              <div className="flex justify-center -space-x-4 mb-8">
+                 <img 
+                   src={auth.currentUser?.photoURL || ''} 
+                   className="w-20 h-20 rounded-full border-4 border-white shadow-xl z-10" 
+                 />
+                 <img 
+                   src={matchData.photoURL || ''} 
+                   className="w-20 h-20 rounded-full border-4 border-white shadow-xl" 
+                 />
+              </div>
+
+              <div className="space-y-3">
+                <button 
+                  onClick={() => {
+                    setMatchData(null);
+                    onStartChat(matchData.uid);
+                  }}
+                  className="w-full bg-mc-green text-white py-4 rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-green-100 flex items-center justify-center gap-2 active:scale-95 transition-all"
+                >
+                  <MessageSquare className="w-4 h-4" /> Send First Message
+                </button>
+                <button 
+                  onClick={() => setMatchData(null)}
+                  className="w-full bg-gray-50 text-gray-400 py-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-gray-100 transition-all"
+                >
+                  Maybe Later
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Full Screen Viewer */}
       <AnimatePresence>

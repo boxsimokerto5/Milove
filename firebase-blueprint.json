@@ -74,6 +74,22 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["authorId", "text", "createdAt"]
+    },
+    "Call": {
+      "title": "Call",
+      "description": "Video/Audio call signaling.",
+      "type": "object",
+      "properties": {
+        "callerId": { "type": "string" },
+        "callerName": { "type": "string" },
+        "callerPhoto": { "type": "string" },
+        "receiverId": { "type": "string" },
+        "status": { "type": "string", "enum": ["calling", "accepted", "rejected", "ended"] },
+        "type": { "type": "string", "enum": ["video", "audio"] },
+        "roomId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["callerId", "receiverId", "status", "roomId", "createdAt"]
     }
   },
   "firestore": {
@@ -96,6 +112,10 @@
     "/announcements/{id}": {
       "schema": "Announcement",
       "description": "Global site banners."
+    },
+    "/calls/{callId}": {
+      "schema": "Call",
+      "description": "Call signaling data."
     }
   }
 }

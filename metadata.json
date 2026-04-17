@@ -2,7 +2,9 @@
   "name": "MiLove",
   "description": "A real-time messaging app with Nearby People discovery and social features, focused on connecting people with love and kindness.",
   "requestFramePermissions": [
-    "geolocation"
+    "geolocation",
+    "camera",
+    "microphone"
   ],
   "majorCapabilities": [
     "real-time-chat",

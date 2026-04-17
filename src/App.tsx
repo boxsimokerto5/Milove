@@ -35,6 +35,8 @@ import ChatList from './components/ChatList';
 import ChatRoom from './components/ChatRoom';
 import Moments from './components/Moments';
 import Profile from './components/Profile';
+import UserProfileView from './components/UserProfileView';
+import CallManager from './components/CallManager';
 import { UserProfile, Announcement } from './types';
 import { notificationManager } from './lib/notifications';
 import { handleFirestoreError, OperationType } from './lib/firestore-errors';
@@ -45,6 +47,7 @@ export default function App() {
   const [announcement, setAnnouncement] = useState<Announcement | null>(null);
   const [activeTab, setActiveTab] = useState<'chats' | 'nearby' | 'moments' | 'profile' | 'admin'>('chats');
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+  const [viewingUserId, setViewingUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const isAdmin = user?.email === "kedaikita1101@gmail.com";
@@ -148,7 +151,18 @@ export default function App() {
   };
 
   const handleLogin = async () => {
-    try { await signInWithPopup(auth, googleProvider); } catch (e) { console.error(e); }
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (e: any) {
+      console.error(e);
+      if (e.code === 'auth/unauthorized-domain') {
+        alert("Domain authentication error. Please add this domain to authorized domains in Firebase Console.");
+      } else if (e.code === 'auth/popup-blocked') {
+        alert("Popup blocked by browser. Please allow popups for this site.");
+      } else {
+        alert("Login failed: " + (e.message || "Unknown error"));
+      }
+    }
   };
 
   const handleLogout = () => {
@@ -251,10 +265,10 @@ export default function App() {
               <div className="flex-1 overflow-y-auto custom-scrollbar overflow-x-hidden">
                 <AnimatePresence mode="wait">
                   <motion.div key={activeTab} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} transition={{ duration: 0.2 }} className="h-full">
-                    {activeTab === 'chats' && <ChatList onSelectChat={setSelectedChatId} />}
-                    {activeTab === 'nearby' && <Nearby onStartChat={handleStartChat} />}
-                    {activeTab === 'moments' && <Moments />}
-                    {activeTab === 'profile' && <Profile profile={profile} onLogout={handleLogout} />}
+                    {activeTab === 'chats' && <ChatList onSelectChat={setSelectedChatId} profile={profile} />}
+                    {activeTab === 'nearby' && <Nearby onStartChat={handleStartChat} profile={profile} onViewProfile={setViewingUserId} />}
+                    {activeTab === 'moments' && <Moments onViewProfile={setViewingUserId} profile={profile} />}
+                    {activeTab === 'profile' && <Profile profile={profile} onLogout={handleLogout} onStartChat={handleStartChat} />}
                     {activeTab === 'admin' && (
                       <div className="p-8 space-y-8">
                         <div className="bg-gray-50 rounded-3xl p-6 border border-gray-100">
@@ -320,6 +334,20 @@ export default function App() {
           </div>
         </div>
       </div>
+      <AnimatePresence>
+        {viewingUserId && (
+          <UserProfileView 
+            userId={viewingUserId} 
+            onClose={() => setViewingUserId(null)} 
+            onStartChat={(uid) => {
+              setViewingUserId(null);
+              handleStartChat(uid);
+            }} 
+            currentUserProfile={profile}
+          />
+        )}
+      </AnimatePresence>
+      <CallManager currentUser={profile} />
     </div>
   );
 }

@@ -91,12 +91,19 @@ service cloud.firestore {
              (!('lng' in data) || data.lng is number) &&
              (!('geohash' in data) || data.geohash is string) &&
              (!('lastSeen' in data) || data.lastSeen is string) &&
-             (!('isActive' in data) || data.isActive is bool);
+             (!('isActive' in data) || data.isActive is bool) &&
+             (!('likes' in data) || data.likes is list) &&
+             (!('likedBy' in data) || data.likedBy is list) &&
+             (!('matches' in data) || data.matches is list) &&
+             (!('blockedUsers' in data) || data.blockedUsers is list);
     }
 
     function isValidMessage(data) {
       return data.senderId == request.auth.uid &&
-             data.text is string && data.text.size() > 0 && data.text.size() < 2000;
+             data.text is string && data.text.size() < 2000 &&
+             (data.text.size() > 0 || ('imageUrl' in data) || ('location' in data)) &&
+             (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() < 1048576)) &&
+             (!('location' in data) || (data.location is map && data.location.lat is number && data.location.lng is number));
     }
 
     function isValidMoment(data) {
@@ -113,6 +120,24 @@ service cloud.firestore {
              data.active is bool;
     }
 
+    function isValidCall(data) {
+      return data.callerId == request.auth.uid &&
+             data.status == 'calling' &&
+             data.type in ['video', 'audio'] &&
+             data.roomId is string;
+    }
+
+    function isBlockedByParticipants(participants) {
+      return participants.size() == 2 && (
+        participants[1] in get(/databases/$(database)/documents/users/$(participants[0])).data.get('blockedUsers', []) ||
+        participants[0] in get(/databases/$(database)/documents/users/$(participants[1])).data.get('blockedUsers', [])
+      );
+    }
+
+    function isUserBlocked(blockerUid, targetUid) {
+      return targetUid in get(/databases/$(database)/documents/users/$(blockerUid)).data.get('blockedUsers', []);
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -122,6 +147,10 @@ service cloud.firestore {
       allow create: if isOwner(userId) && isValidUser(request.resource.data);
       allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
                     (!('accountId' in request.resource.data) || request.resource.data.accountId == resource.data.accountId);
+      // Allow others to update likes/likedBy/matches for matching system
+      allow update: if isAuthenticated() && (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'likedBy', 'matches', 'blockedUsers'])
+      );
       allow delete: if isAdmin();
     }
 
@@ -131,15 +160,21 @@ service cloud.firestore {
       
       allow create: if isAuthenticated() && 
                     request.resource.data.participants.size() == 2 &&
-                    request.auth.uid in request.resource.data.participants;
+                    request.auth.uid in request.resource.data.participants &&
+                    !isBlockedByParticipants(request.resource.data.participants);
                     
-      allow update: if isAuthenticated() && request.auth.uid in resource.data.participants;
+      allow update: if isAuthenticated() && request.auth.uid in resource.data.participants &&
+                    !isBlockedByParticipants(resource.data.participants);
       
       match /messages/{msgId} {
         allow read: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants;
         allow create: if isAuthenticated() && 
                       request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants &&
+                      !isBlockedByParticipants(get(/databases/$(database)/documents/conversations/$(convId)).data.participants) &&
                       isValidMessage(request.resource.data);
+        allow update: if isAuthenticated() && 
+                      request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants &&
+                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions']);
       }
     }
 
@@ -171,6 +206,14 @@ service cloud.firestore {
     match /announcements/{annId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin() && (!('text' in request.resource.data) || isValidAnnouncement(request.resource.data));
+    }
+
+    match /calls/{callId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.callerId || request.auth.uid == resource.data.receiverId);
+      allow create: if isAuthenticated() && isValidCall(request.resource.data) && !isUserBlocked(request.resource.data.receiverId, request.auth.uid);
+      allow update: if isAuthenticated() && (request.auth.uid == resource.data.callerId || request.auth.uid == resource.data.receiverId) &&
+                    request.resource.data.status in ['calling', 'accepted', 'rejected', 'ended'];
+      allow delete: if isAuthenticated() && (request.auth.uid == resource.data.callerId || request.auth.uid == resource.data.receiverId);
     }
   }
 }

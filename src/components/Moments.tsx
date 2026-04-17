@@ -3,12 +3,17 @@ import { db, auth } from '../firebase';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, updateDoc, doc, arrayUnion, arrayRemove, increment, getDocs, limit } from 'firebase/firestore';
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
 import { fileToBase64 } from '../lib/file-utils';
-import { Moment, Comment } from '../types';
+import { Moment, Comment, UserProfile } from '../types';
 import { Heart, MessageSquare, Send, Camera, MoreHorizontal, X, Image as ImageIcon, Maximize2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
 
-export default function Moments() {
+interface MomentsProps {
+  onViewProfile: (uid: string) => void;
+  profile: UserProfile | null;
+}
+
+export default function Moments({ onViewProfile, profile }: MomentsProps) {
   const [moments, setMoments] = useState<Moment[]>([]);
   const [newPost, setNewPost] = useState('');
   const [isPosting, setIsPosting] = useState(false);
@@ -22,6 +27,8 @@ export default function Moments() {
       const docs: Moment[] = [];
       snap.forEach(d => docs.push({ id: d.id, ...d.data() } as Moment));
       setMoments(docs);
+    }, (err) => {
+      handleFirestoreError(err, OperationType.LIST, 'moments');
     });
     return () => unsubscribe();
   }, []);
@@ -72,6 +79,8 @@ export default function Moments() {
       }
     }
   };
+
+  const displayedMoments = moments.filter(m => !profile?.blockedUsers?.includes(m.authorId));
 
   return (
     <div className="bg-gray-50 flex flex-col h-full overflow-y-auto pb-20 scroll-smooth">
@@ -140,12 +149,13 @@ export default function Moments() {
 
       {/* Feed */}
       <div className="space-y-3 px-3">
-        {moments.map(moment => (
+        {displayedMoments.map(moment => (
           <MomentItem 
             key={moment.id} 
             moment={moment} 
             onLike={() => handleLike(moment)} 
             onViewImage={setFullscreenImage}
+            onViewProfile={onViewProfile}
           />
         ))}
       </div>
@@ -181,7 +191,13 @@ export default function Moments() {
   );
 }
 
-function MomentItem({ moment, onLike, onViewImage }: { key?: string, moment: Moment, onLike: () => void | Promise<void>, onViewImage: (url: string) => void }) {
+function MomentItem({ moment, onLike, onViewImage, onViewProfile }: { 
+  key?: string, 
+  moment: Moment, 
+  onLike: () => void | Promise<void>, 
+  onViewImage: (url: string) => void,
+  onViewProfile: (uid: string) => void
+}) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [showComments, setShowComments] = useState(false);
   const [newComment, setNewComment] = useState('');
@@ -225,14 +241,14 @@ function MomentItem({ moment, onLike, onViewImage }: { key?: string, moment: Mom
   return (
     <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-mc-border overflow-hidden">
       <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 cursor-pointer group" onClick={() => onViewProfile(moment.authorId)}>
           <img 
             src={moment.authorPhoto || `https://ui-avatars.com/api/?name=${moment.authorName}`} 
-            className="w-12 h-12 rounded-[1.25rem] object-cover"
+            className="w-12 h-12 rounded-[1.25rem] object-cover transition-transform group-hover:scale-105"
             alt=""
           />
           <div>
-            <h3 className="font-bold text-sm text-mc-text tracking-tight">{moment.authorName}</h3>
+            <h3 className="font-bold text-sm text-mc-text tracking-tight group-hover:text-mc-green transition-colors">{moment.authorName}</h3>
             <p className="text-[10px] text-mc-text-secondary uppercase tracking-widest font-black">
               {moment.createdAt?.toDate ? formatDistanceToNow(moment.createdAt.toDate(), { addSuffix: true }) : 'just now'}
             </p>

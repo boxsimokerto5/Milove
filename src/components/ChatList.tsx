@@ -2,15 +2,17 @@ import React, { useState, useEffect, useRef } from 'react';
 import { db, auth } from '../firebase';
 import { collection, query, where, onSnapshot, doc, getDoc, orderBy } from 'firebase/firestore';
 import { Conversation, UserProfile } from '../types';
+import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
 import { MessageCircle, Clock, Search } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { notificationManager } from '../lib/notifications';
 
 interface ChatListProps {
   onSelectChat: (id: string) => void;
+  profile: UserProfile | null;
 }
 
-export default function ChatList({ onSelectChat }: ChatListProps) {
+export default function ChatList({ onSelectChat, profile }: ChatListProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [loading, setLoading] = useState(true);
   const lastUpdateRef = useRef<number>(Date.now());
@@ -62,14 +64,23 @@ export default function ChatList({ onSelectChat }: ChatListProps) {
         }
       }
       
-      setConversations(convs);
+      const filteredConvs = convs.filter(c => {
+        if (!c.otherUser) return true;
+        // Filter out if I blocked them
+        if (profile?.blockedUsers?.includes(c.otherUser.uid)) return false;
+        // Filter out if they blocked me
+        if (c.otherUser.blockedUsers?.includes(auth.currentUser?.uid || '')) return false;
+        return true;
+      });
+      
+      setConversations(filteredConvs);
       setLoading(false);
       
       // Update the "last seen" time to the latest message update time in the snapshot
-      const maxUpdate = Math.max(...convs.map(c => c.updatedAt?.toMillis ? c.updatedAt.toMillis() : 0), lastUpdateRef.current);
+      const maxUpdate = Math.max(...filteredConvs.map(c => c.updatedAt?.toMillis ? c.updatedAt.toMillis() : 0), lastUpdateRef.current);
       lastUpdateRef.current = maxUpdate;
     }, (error) => {
-      console.error("Chat list error:", error);
+      handleFirestoreError(error, OperationType.LIST, 'conversations');
       setLoading(false);
     });
 
@@ -138,7 +149,7 @@ export default function ChatList({ onSelectChat }: ChatListProps) {
                 <div className="flex items-center justify-between">
                   <p className="text-xs text-mc-text-secondary truncate pr-2">
                     {conv.lastMessage?.senderId === auth.currentUser?.uid ? 'You: ' : ''}
-                    {conv.lastMessage?.text || 'Start a conversation'}
+                    {conv.lastMessage?.location ? '📍 Location' : (conv.lastMessage?.imageUrl ? '📷 Photo' : (conv.lastMessage?.text || 'Start a conversation'))}
                   </p>
                 </div>
               </div>

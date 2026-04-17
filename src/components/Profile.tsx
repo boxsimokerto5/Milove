@@ -4,24 +4,27 @@ import { updateDoc, doc, collection, query, where, onSnapshot, orderBy } from 'f
 import { handleFirestoreError, OperationType } from '../lib/firestore-errors';
 import { fileToBase64 } from '../lib/file-utils';
 import { UserProfile, Moment } from '../types';
-import { User, AlignLeft, Info, ChevronRight, Shield, Heart, Image, Star, Lock, X, Maximize2, ArrowLeft, Settings, LifeBuoy, MessageSquare, LogOut } from 'lucide-react';
+import { User, AlignLeft, Info, ChevronRight, Shield, Heart, Image, Star, Lock, X, Maximize2, ArrowLeft, Settings, LifeBuoy, MessageSquare, LogOut, Users, Sparkles, Camera } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface ProfileProps {
   profile: UserProfile | null;
   onLogout?: () => void;
+  onStartChat?: (uid: string) => void;
 }
 
-export default function Profile({ profile, onLogout }: ProfileProps) {
+export default function Profile({ profile, onLogout, onStartChat }: ProfileProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [displayName, setDisplayName] = useState(profile?.displayName || '');
   const [photoURL, setPhotoURL] = useState(profile?.photoURL || '');
   const [bio, setBio] = useState(profile?.bio || '');
+  const [birthDate, setBirthDate] = useState(profile?.birthDate || '');
   const [gender, setGender] = useState(profile?.gender || 'other');
   const [fullscreenProfileImage, setFullscreenProfileImage] = useState<string | null>(null);
-  const [activeSubView, setActiveSubView] = useState<'main' | 'photos' | 'likes' | 'privacy' | 'security' | 'help'>('main');
+  const [activeSubView, setActiveSubView] = useState<'main' | 'photos' | 'likes' | 'privacy' | 'security' | 'help' | 'matches'>('main');
   const [userMoments, setUserMoments] = useState<Moment[]>([]);
   const [likedMoments, setLikedMoments] = useState<Moment[]>([]);
+  const [matches, setMatches] = useState<UserProfile[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -42,6 +45,15 @@ export default function Profile({ profile, onLogout }: ProfileProps) {
          const docs: Moment[] = [];
          snap.forEach(d => docs.push({ id: d.id, ...d.data() } as Moment));
          setLikedMoments(docs);
+       });
+    }
+
+    if (activeSubView === 'matches' && profile.matches && profile.matches.length > 0) {
+       const q = query(collection(db, 'users'), where('uid', 'in', profile.matches));
+       return onSnapshot(q, (snap) => {
+         const docs: UserProfile[] = [];
+         snap.forEach(d => docs.push(d.data() as UserProfile));
+         setMatches(docs);
        });
     }
   }, [activeSubView, profile]);
@@ -65,6 +77,7 @@ export default function Profile({ profile, onLogout }: ProfileProps) {
         displayName,
         photoURL,
         bio,
+        birthDate,
         gender
       });
       setIsEditing(false);
@@ -74,6 +87,18 @@ export default function Profile({ profile, onLogout }: ProfileProps) {
   };
 
   if (!profile) return null;
+
+  const calculateAge = (bday: string) => {
+    if (!bday) return null;
+    const today = new Date();
+    const birth = new Date(bday);
+    let age = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
+      age--;
+    }
+    return age;
+  };
 
   const renderSubView = () => {
     switch (activeSubView) {
@@ -171,7 +196,7 @@ export default function Profile({ profile, onLogout }: ProfileProps) {
              </button>
           </div>
         );
-      case 'help':
+       case 'help':
         return (
           <div className="space-y-6">
              <div className="p-5 bg-mc-light-green/30 rounded-3xl border border-mc-green/10">
@@ -207,6 +232,43 @@ export default function Profile({ profile, onLogout }: ProfileProps) {
                    <ChevronRight className="w-4 h-4 text-white/50" />
                 </button>
              </div>
+          </div>
+        );
+      case 'matches':
+        return (
+          <div className="space-y-4">
+             {matches.length > 0 ? (
+               <div className="space-y-3">
+                 {matches.map(person => (
+                   <div key={person.uid} className="bg-white p-4 rounded-3xl border border-gray-100 flex items-center gap-4 hover:border-mc-green transition-all shadow-sm">
+                     <img src={person.photoURL || `https://ui-avatars.com/api/?name=${person.displayName}`} className="w-12 h-12 rounded-full object-cover" alt="" />
+                     <div className="flex-1">
+                        <h4 className="font-bold text-mc-text">{person.displayName}</h4>
+                        <p className="text-[10px] text-mc-green uppercase font-black tracking-widest leading-none mt-1">Matched with you</p>
+                     </div>
+                     <button 
+                       onClick={() => {
+                         if (onStartChat) {
+                           setActiveSubView('main');
+                           onStartChat(person.uid);
+                         }
+                       }}
+                       className="p-3 bg-mc-green/10 text-mc-green rounded-2xl hover:bg-mc-green hover:text-white transition-all"
+                     >
+                       <MessageSquare className="w-5 h-5" />
+                     </button>
+                   </div>
+                 ))}
+               </div>
+             ) : (
+               <div className="py-20 text-center text-gray-400">
+                  <div className="bg-mc-green/5 w-20 h-20 rounded-[2.5rem] flex items-center justify-center mx-auto mb-6">
+                    <Sparkles className="w-10 h-10 text-mc-green/20" />
+                  </div>
+                  <h3 className="text-mc-text font-bold mb-1">No matches yet</h3>
+                  <p className="text-xs text-gray-400 max-w-[200px] mx-auto">Start liking people nearby to find your perfect connection!</p>
+               </div>
+             )}
           </div>
         );
       default:
@@ -250,17 +312,22 @@ export default function Profile({ profile, onLogout }: ProfileProps) {
                      onChange={handleFileChange} 
                    />
                    {isEditing && (
-                     <div className="absolute inset-0 bg-black/40 rounded-[2.5rem] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                       <Image className="text-white w-8 h-8" />
+                     <div className="absolute inset-0 bg-black/40 rounded-[2.5rem] flex items-center justify-center group-hover:opacity-100 transition-opacity">
+                       <Camera className="text-white w-8 h-8" />
                      </div>
                    )}
                    <div className="absolute -bottom-1 -right-1 w-8 h-8 bg-white rounded-2xl flex items-center justify-center shadow-lg">
-                      <div className="w-5 h-5 bg-mc-green rounded-xl"></div>
+                      <div className="w-5 h-5 bg-mc-green rounded-xl flex items-center justify-center">
+                        <Camera className="w-3 h-3 text-white" />
+                      </div>
                    </div>
                 </div>
                 
-                <div className="text-white">
-                  <h2 className="text-2xl font-bold mb-1 tracking-tight">{profile.displayName}</h2>
+                <div className="text-white text-center">
+                  <h2 className="text-2xl font-bold mb-1 tracking-tight">
+                    {profile.displayName}
+                    {profile.birthDate && <span className="ml-2 opacity-80">({calculateAge(profile.birthDate)})</span>}
+                  </h2>
                   <div className="flex items-center gap-2 bg-black/10 px-3 py-1 rounded-full backdrop-blur-sm self-center">
                      <span className="text-[10px] font-black uppercase tracking-widest text-white/90">ID: {profile.accountId}</span>
                   </div>
@@ -273,7 +340,7 @@ export default function Profile({ profile, onLogout }: ProfileProps) {
               {/* Horizontal Menu Grid */}
               <div className="grid grid-cols-4 gap-3">
                  {[
-                   { icon: Image, label: 'Photos', color: 'bg-orange-50 text-orange-500', action: () => setActiveSubView('photos') },
+                   { icon: Sparkles, label: 'Matches', color: 'bg-mc-light-green/20 text-mc-green', action: () => setActiveSubView('matches') },
                    { icon: Star, label: 'Favorites', color: 'bg-yellow-50 text-yellow-500', action: () => setActiveSubView('likes') },
                    { icon: Heart, label: 'Likes', color: 'bg-rose-50 text-rose-500', action: () => setActiveSubView('likes') },
                    { icon: Lock, label: 'Privacy', color: 'bg-emerald-50 text-emerald-500', action: () => setActiveSubView('privacy') }
@@ -298,8 +365,9 @@ export default function Profile({ profile, onLogout }: ProfileProps) {
                     <button 
                       onClick={() => {
                         setDisplayName(profile.displayName);
-                        setPhotoURL(profile.photoURL);
-                        setBio(profile.bio);
+                        setPhotoURL(profile.photoURL || '');
+                        setBio(profile.bio || '');
+                        setBirthDate(profile.birthDate || '');
                         setGender(profile.gender || 'other');
                         setIsEditing(true);
                       }}
@@ -345,6 +413,16 @@ export default function Profile({ profile, onLogout }: ProfileProps) {
                         onChange={(e) => setDisplayName(e.target.value)}
                         className="w-full bg-gray-50 rounded-xl px-4 py-2.5 text-sm focus:ring-1 focus:ring-mc-green border-none"
                         placeholder="Enter display name"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block mb-1">Birth Date</label>
+                      <input 
+                        type="date"
+                        value={birthDate}
+                        onChange={(e) => setBirthDate(e.target.value)}
+                        className="w-full bg-gray-50 rounded-xl px-4 py-2.5 text-sm focus:ring-1 focus:ring-mc-green border-none"
                       />
                     </div>
                     
